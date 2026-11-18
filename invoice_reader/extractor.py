@@ -3,7 +3,12 @@ import base64
 import json
 import os
 import re
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
+
+from stdnum.do import cedula as _cedula
+from stdnum.do import ncf as _ncf
+from stdnum.do import rnc as _rnc
 
 SYSTEM_PROMPT = """Eres un extractor de facturas dominicanas. Analiza la imagen y devuelve ÚNICAMENTE un JSON válido con esta estructura exacta:
 {
@@ -99,9 +104,58 @@ def _dec(v) -> Decimal | None:
         return None
 
 
-def validate(data: dict) -> dict:
-    """Añade warnings de coherencia (Decimal; tolerancia 0,02 como en Facturar.do)."""
+# El modelo suele devolver score 1.0 en todo, incluso en lecturas erróneas: no es fiable.
+# Se limita a 0,95 (nunca "certero") y se baja a DOUBT si el dato no pasa una validación objetiva.
+MAX_MODEL_SCORE = 0.95
+DOUBT = 0.4
+
+
+def _norm_field(data: dict, key: str) -> dict:
+    f = data.get(key)
+    if not isinstance(f, dict):
+        f = {}
+    v = f.get("valor")
+    v = None if v is None or str(v).strip() == "" else str(v).strip()
+    try:
+        sc = float(f.get("score", 0))
+    except (TypeError, ValueError):
+        sc = 0.0
+    f["valor"] = v
+    f["score"] = 0.0 if v is None else max(0.0, min(sc, MAX_MODEL_SCORE))
+    data[key] = f
+    return f
+
+
+def _check_rnc(v: str) -> bool:
+    d = re.sub(r"\D", "", v)
+    return (len(d) == 9 and _rnc.is_valid(d)) or (len(d) == 11 and _cedula.is_valid(d))
+
+
+def _check_fecha(v: str, today: date) -> bool:
+    try:
+        d = date.fromisoformat(v)
+    except ValueError:
+        return False
+    return today - timedelta(days=3650) <= d <= today + timedelta(days=1)
+
+
+def validate(data: dict, today: date | None = None) -> dict:
+    """Validaciones objetivas (formato y dígito verificador) + coherencia de totales (Decimal, tol. 0,02)."""
+    today = today or date.today()
     warnings = list(data.get("warnings") or [])
+    fields = {k: _norm_field(data, k) for k in ("emisor", "rnc", "ncf", "fecha")}
+
+    def doubt(key: str, msg: str) -> None:
+        fields[key]["score"] = min(fields[key]["score"], DOUBT)
+        warnings.append(msg)
+
+    if (v := fields["rnc"]["valor"]) and not _check_rnc(v):
+        doubt("rnc", f"RNC/cédula '{v}' no pasa la verificación oficial: revisa los dígitos")
+    if (v := fields["ncf"]["valor"]) and not _ncf.is_valid(v):
+        doubt("ncf", f"NCF '{v}' no tiene un formato válido")
+    if (v := fields["fecha"]["valor"]) and not _check_fecha(v, today):
+        doubt("fecha", f"Fecha '{v}' no es válida o no es plausible")
+
     t = data.get("totales") or {}
     base, itbis, total = _dec(t.get("base_imponible")), _dec(t.get("itbis")), _dec(t.get("total"))
     if None in (base, itbis, total):

@@ -216,7 +216,7 @@ function fromApi(d, warnings) {
     fields: [fld('emisor', 'Emisor'), fld('rnc', 'RNC'), fld('ncf', 'NCF'), fld('fecha', 'Fecha')],
     lines: (Array.isArray(d.lineas) ? d.lineas : []).map((l) => ({ desc: str(l.descripcion), qty: Number(l.cantidad) || 0, price: Number(l.precio_unitario) || 0, itbis: l.itbis_pct })),
     totals: { base: str(t.base_imponible), itbis: str(t.itbis), total: str(t.total) },
-    extra: warnings.filter((w) => /^Línea/.test(w)),
+    extra: warnings.filter((w) => /^(Línea|RNC|NCF|Fecha)/.test(w)),
   };
 }
 
