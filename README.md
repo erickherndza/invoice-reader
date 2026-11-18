@@ -15,6 +15,16 @@ set -a; . ./.env; set +a
 
 Docker: `docker build -t invoice-reader . && docker run -p 8080:8080 --env-file .env invoice-reader`
 
+## Interfaz móvil
+Al abrir `/` el servicio muestra una app web móvil (sin build, HTML/CSS/JS puros) con el flujo
+**escanear → revisar → guardar**: cámara o galería, lectura con avisos de confianza por campo,
+corrección de datos y descarga a Excel (CSV). Diseño en `invoice_reader/static/`.
+- Pide la API key una vez y la guarda solo en el navegador del dispositivo (`localStorage`).
+- "Recientes" se guarda solo en el dispositivo (nombre, fecha, total, estado); el servidor no guarda nada.
+- La cámara del navegador exige **HTTPS** (o `localhost`); sin ella queda la galería.
+- La CSP es estricta (sin scripts ni estilos inline, sin CDN) y el texto del modelo se inserta como texto, nunca como HTML.
+- Las fuentes (Inter y Space Grotesk, licencia OFL) van incluidas en `static/fonts/`.
+
 ## API
 
 `GET /health` → `{ "ok": true }`
