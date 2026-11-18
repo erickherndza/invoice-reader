@@ -1,0 +1,38 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: invoice_reader
+      POSTGRES_USER: invoice
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Define POSTGRES_PASSWORD en .env (solo hex, openssl rand -hex 24)}"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U invoice -d invoice_reader"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # Sin 'ports': la base solo es accesible desde la red interna de Compose.
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      API_KEYS: "${API_KEYS:?Define API_KEYS en .env}"
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-haiku-5-5}
+      GROQ_MODEL: ${GROQ_MODEL:-meta-llama/llama-4-scout-17b-16e-instruct}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-10}
+      RATE_LIMIT_WINDOW: ${RATE_LIMIT_WINDOW:-60}
+      DATABASE_URL: postgresql://invoice:${POSTGRES_PASSWORD}@db:5432/invoice_reader
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:8080:8080"
+
+volumes:
+  pgdata:

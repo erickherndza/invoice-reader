@@ -1,18 +1,33 @@
 import base64
 import binascii
+import logging
+from datetime import datetime
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, g, jsonify, request
 
 from .extractor import ExtractionError, extract_invoice
 from .images import ALLOWED, sniff_media_type
-from .security import require_api_key
+from . import db
+from .security import authenticated, require_api_key
 
 bp = Blueprint("api", __name__)
+log = logging.getLogger(__name__)
 
 
 @bp.get("/health")
 def health():
     return jsonify(ok=True, service="invoice-reader")
+
+
+@bp.get("/health/ready")
+def ready():
+    """Readiness: comprueba la base de datos si está configurada."""
+    if db.enabled():
+        try:
+            db.ping()
+        except Exception:
+            return jsonify(ok=False, service="invoice-reader", db="down"), 503
+    return jsonify(ok=True, service="invoice-reader", db="up" if db.enabled() else "disabled")
 
 
 @bp.post("/v1/invoices/extract")
@@ -47,4 +62,59 @@ def extract():
         return jsonify(ok=False, code="OCR_ERROR", error="Error procesando la imagen."), 502
 
     provider = data.pop("provider", "?")
-    return jsonify(ok=True, provider=provider, data=data, warnings=data.get("warnings", []))
+    invoice_id = None
+    if db.enabled():
+        try:
+            from . import store
+            invoice_id = str(store.insert_invoice(g.owner, provider, data))
+        except Exception:
+            # La lectura ya se pagó: se devuelve igual, sin id, y se registra el fallo.
+            log.exception("No se pudo guardar la lectura en la base de datos")
+    return jsonify(ok=True, id=invoice_id, provider=provider, data=data, warnings=data.get("warnings", []))
+
+
+def _need_db():
+    if not db.enabled():
+        return jsonify(ok=False, code="HISTORY_DISABLED",
+                       error="Historial no habilitado (falta DATABASE_URL)."), 501
+    return None
+
+
+@bp.get("/v1/invoices")
+@authenticated
+def list_invoices():
+    if (err := _need_db()):
+        return err
+    from . import store
+    try:
+        limit = max(1, min(int(request.args.get("limit", 20)), 100))
+        before = datetime.fromisoformat(request.args["before"]) if request.args.get("before") else None
+    except ValueError:
+        return jsonify(ok=False, code="BAD_REQUEST", error="'limit' o 'before' inválido."), 400
+    rows = store.list_invoices(g.owner, limit, before)
+    items = [{**r, "id": str(r["id"]), "created_at": r["created_at"].isoformat()} for r in rows]
+    return jsonify(ok=True, items=items, next_before=items[-1]["created_at"] if len(items) == limit else None)
+
+
+@bp.get("/v1/invoices/<uuid:invoice_id>")
+@authenticated
+def get_invoice(invoice_id):
+    if (err := _need_db()):
+        return err
+    from . import store
+    row = store.get_invoice(g.owner, invoice_id)
+    if not row:  # también cuando existe pero es de otro dueño: no se revela
+        return jsonify(ok=False, code="NOT_FOUND", error="No encontrada."), 404
+    return jsonify(ok=True, id=str(row["id"]), provider=row["provider"], data=row["data"],
+                   created_at=row["created_at"].isoformat())
+
+
+@bp.delete("/v1/invoices/<uuid:invoice_id>")
+@authenticated
+def delete_invoice(invoice_id):
+    if (err := _need_db()):
+        return err
+    from . import store
+    if not store.delete_invoice(g.owner, invoice_id):
+        return jsonify(ok=False, code="NOT_FOUND", error="No encontrada."), 404
+    return jsonify(ok=True)

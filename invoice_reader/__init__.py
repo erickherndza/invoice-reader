@@ -2,6 +2,7 @@ import os
 
 from flask import Flask, jsonify, send_from_directory
 
+from . import db
 from .api import bp
 
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8 MB
@@ -18,6 +19,8 @@ def create_app() -> Flask:
     app = Flask(__name__, static_folder="static", static_url_path="/static")
     app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
     app.register_blueprint(bp)
+    if db.enabled():
+        db.migrate()  # si falla, el arranque falla: mejor que servir sin esquema
 
     @app.get("/")
     def index():
