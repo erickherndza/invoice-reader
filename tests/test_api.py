@@ -143,3 +143,16 @@ def test_campos_ausentes_o_malformados_no_rompen():
     d = validate({"rnc": "texto suelto", "lineas": [{"itbis_pct": 20}]}, today=HOY)
     assert d["rnc"] == {"valor": None, "score": 0.0}
     assert any("Línea 1" in w for w in d["warnings"])
+
+
+def test_claude_ignora_bloques_thinking(monkeypatch):
+    from types import SimpleNamespace as NS
+    from invoice_reader import extractor
+    msg = NS(content=[NS(type="thinking", thinking="..."), NS(type="text", text='{"a": 1}')],
+             usage=NS(input_tokens=10, output_tokens=5), stop_reason="end_turn")
+    fake = NS(messages=NS(create=lambda **k: msg))
+    import anthropic
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "x")
+    monkeypatch.setattr(anthropic, "Anthropic", lambda api_key: fake)
+    text, usage = extractor._claude(b"x", "image/png")
+    assert text == '{"a": 1}' and usage == {"input": 10, "output": 5}

@@ -83,7 +83,11 @@ def _claude(image_bytes: bytes, media_type: str) -> tuple[str, dict]:
             {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
         ]}],
     )
-    return msg.content[0].text, {"input": msg.usage.input_tokens, "output": msg.usage.output_tokens}
+    # Haiku 5.x puede anteponer bloques de "thinking": solo interesan los de texto.
+    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    if not text:
+        raise ExtractionError(f"Claude no devolvió texto (stop_reason={msg.stop_reason})")
+    return text, {"input": msg.usage.input_tokens, "output": msg.usage.output_tokens}
 
 
 def parse_response(text: str) -> dict:
