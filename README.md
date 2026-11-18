@@ -2,7 +2,7 @@
 
 Web service que lee una foto de factura dominicana y devuelve JSON estructurado
 (emisor, RNC, NCF, fecha, líneas con ITBIS, totales) con un score de confianza por campo.
-Extraído de Facturar.do. Proveedores de visión: Groq (Llama 4 Scout) o Claude.
+Extraído de Facturar.do. Proveedores de visión: Groq (Qwen 3.8, visión) o Claude.
 
 ## Uso con Docker (recomendado: app Python + PostgreSQL)
 

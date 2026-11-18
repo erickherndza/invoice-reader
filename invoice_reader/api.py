@@ -59,6 +59,7 @@ def extract():
     except ExtractionError as e:
         return jsonify(ok=False, code="OCR_ERROR", error=str(e)), 503
     except Exception:
+        log.exception("Fallo del proveedor LLM")  # detalle solo en el log, no al cliente
         return jsonify(ok=False, code="OCR_ERROR", error="Error procesando la imagen."), 502
 
     provider = data.pop("provider", "?")

@@ -48,7 +48,7 @@ def _groq(image_bytes: bytes, media_type: str) -> str:
 
     b64 = base64.b64encode(image_bytes).decode()
     resp = Groq(api_key=api_key).chat.completions.create(
-        model=os.environ.get("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct"),
+        model=os.environ.get("GROQ_MODEL", "qwen/qwen3.8-27b"),
         messages=[{"role": "user", "content": [
             {"type": "text", "text": SYSTEM_PROMPT},
             {"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{b64}"}},
