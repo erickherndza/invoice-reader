@@ -32,20 +32,23 @@ class ExtractionError(RuntimeError):
     """Error de configuración o del proveedor LLM."""
 
 
-def extract_invoice(image_bytes: bytes, media_type: str) -> dict:
-    provider = os.environ.get("LLM_PROVIDER", "groq").lower()
+def extract_invoice(image_bytes: bytes, media_type: str, provider: str | None = None) -> dict:
+    """Lee la factura. `provider` fuerza groq|claude (si no, usa LLM_PROVIDER).
+    Devuelve el JSON validado + 'provider' y 'usage' (tokens), que la API retira antes de responder."""
+    provider = (provider or os.environ.get("LLM_PROVIDER", "groq")).lower()
     if provider == "groq":
-        text = _groq(image_bytes, media_type)
+        text, usage = _groq(image_bytes, media_type)
     elif provider == "claude":
-        text = _claude(image_bytes, media_type)
+        text, usage = _claude(image_bytes, media_type)
     else:
         raise ExtractionError(f"LLM_PROVIDER desconocido: {provider}")
     data = parse_response(text)
     data["provider"] = provider
+    data["usage"] = usage
     return validate(data)
 
 
-def _groq(image_bytes: bytes, media_type: str) -> str:
+def _groq(image_bytes: bytes, media_type: str) -> tuple[str, dict]:
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
         raise ExtractionError("GROQ_API_KEY no configurada")
@@ -61,10 +64,11 @@ def _groq(image_bytes: bytes, media_type: str) -> str:
         max_tokens=1024,
         temperature=0,
     )
-    return resp.choices[0].message.content
+    u = resp.usage
+    return resp.choices[0].message.content, {"input": u.prompt_tokens, "output": u.completion_tokens}
 
 
-def _claude(image_bytes: bytes, media_type: str) -> str:
+def _claude(image_bytes: bytes, media_type: str) -> tuple[str, dict]:
     api_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if not api_key:
         raise ExtractionError("ANTHROPIC_API_KEY no configurada")
@@ -79,7 +83,7 @@ def _claude(image_bytes: bytes, media_type: str) -> str:
             {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": b64}},
         ]}],
     )
-    return msg.content[0].text
+    return msg.content[0].text, {"input": msg.usage.input_tokens, "output": msg.usage.output_tokens}
 
 
 def parse_response(text: str) -> dict:

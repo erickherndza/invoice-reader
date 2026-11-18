@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .DS_Store
+
+# Facturas de prueba: contienen datos fiscales reales, nunca al repo
+samples/*
+!samples/.gitkeep

@@ -63,6 +63,7 @@ def extract():
         return jsonify(ok=False, code="OCR_ERROR", error="Error procesando la imagen."), 502
 
     provider = data.pop("provider", "?")
+    data.pop("usage", None)  # tokens: solo para métricas/comparativas, no se expone ni se guarda
     invoice_id = None
     if db.enabled():
         try:

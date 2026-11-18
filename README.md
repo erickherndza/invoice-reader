@@ -79,6 +79,14 @@ Respuesta de `extract` (incluye `id` del historial si hay base de datos):
 `warnings` avisa de incoherencias (base + ITBIS ≠ total con tolerancia 0,02; ITBIS distinto de 0/16/18).
 **Los datos extraídos por IA deben revisarse antes de usarse contablemente.**
 
+## Comparar proveedores (Groq vs Claude Haiku)
+Pon fotos de facturas en `samples/` (no se suben al repo) y, si quieres medir acierto, un `<foto>.expected.json`
+con `{"rnc":"…","ncf":"…","fecha":"AAAA-MM-DD","total":0.00}`. Luego:
+```bash
+docker compose run --rm -v "$PWD/samples:/samples:ro" web python scripts/compare_providers.py /samples
+```
+Muestra por factura tiempo, tokens reales, costo, campos leídos, avisos y desacuerdos entre proveedores.
+
 ## Seguridad y límites conocidos
 - Sin `API_KEYS` el servicio responde 503 (falla cerrado). Las imágenes no se guardan en ningún sitio.
 - El rate limit vive en PostgreSQL: se comparte entre workers y réplicas y sobrevive a reinicios.
